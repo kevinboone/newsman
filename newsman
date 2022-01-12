@@ -1,0 +1,99 @@
+#!/bin/bash
+
+#===========================================================================
+#
+# Download BBC News headlines and format so they can be read in the
+# console using the manual viewer.
+#
+# Requires: curl, sed, xsltproc
+#
+# usage: newsman [topic]
+# See code below for list of topics
+#
+# https://kevinboone.me/clh_newsman.html
+#
+# Copyright (c)2022 Kevin Boone, GPL v3.0
+#
+#===========================================================================
+
+# The feed and page title that will be used if there is no command-line
+#  argument
+FEED="http://feeds.bbci.co.uk/news/rss.xml"
+TITLE="Headlines"
+
+# The file where we will write out the style sheet, for later use by
+#  xsltprc
+XSLTFILE="/tmp/newsman$$"
+
+# Work out what RSS feed to use, based on the command-line argument
+if [ ! -z "$1" ] ; then
+  if [ "$1" == "world" ] ; then
+    FEED="http://feeds.bbci.co.uk/news/world/rss.xml"
+    TITLE="World"
+  elif [ "$1" == "uk" ] ; then
+    FEED="http://feeds.bbci.co.uk/news/uk/rss.xml"
+    TITLE="UK"
+  elif [ "$1" == "UK" ] ; then
+    FEED="http://feeds.bbci.co.uk/news/uk/rss.xml"
+    TITLE="UK"
+  elif [ "$1" == "business" ] ; then
+    FEED="http://feeds.bbci.co.uk/news/business/rss.xml"
+    TITLE="Business"
+  elif [ "$1" == "politics" ] ; then
+    FEED="http://feeds.bbci.co.uk/news/politics/rss.xml"
+    TITLE="Politics"
+  elif [ "$1" == "health" ] ; then
+    FEED="http://feeds.bbci.co.uk/news/health/rss.xml"
+    TITLE="Health"
+  elif [ "$1" == "education" ] ; then
+    FEED="http://feeds.bbci.co.uk/news/education/rss.xml"
+    TITLE="Education and Family"
+  elif [ "$1" == "science" ] ; then
+    FEED="http://feeds.bbci.co.uk/news/science_and_environment/rss.xml"
+    TITLE="Science and Environment"
+  elif [ "$1" == "technology" ] ; then
+    FEED="http://feeds.bbci.co.uk/news/technology/rss.xml"
+    TITLE="Technology"
+  elif [ "$1" == "entertainment" ] ; then
+    FEED="http://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"
+    TITLE="Entertainment and Arts"
+  else
+    echo Usage: newsman [topic]
+    echo Topics are : world, uk, health, business, politics, education, 
+    echo science, technology, entertainment. Omit topic for
+    echo general headlines. 
+    exit
+  fi 
+fi
+
+# Write the (simple) stylesheet to a convenient file -- we will edit
+#  it in place later
+
+cat << EOF > $XSLTFILE 
+<xsl:stylesheet version="1.0"
+        xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+<xsl:template match="/rss/channel">
+.TH "BBC News" "7" "" "" "@@@TITLE@@@"
+  <xsl:for-each select="item">
+
+\fB<xsl:value-of select="title"/>\fR
+.br
+<xsl:value-of select="description"/>
+
+</xsl:for-each>
+
+</xsl:template>
+</xsl:stylesheet>
+EOF
+
+# Set the title in the style sheet, so it will be written in the header
+#  by the manual viewer
+sed --in-place s/@@@TITLE@@@/"$TITLE"/ $XSLTFILE
+
+# Do all the work -- download the feed, apply the style sheet,
+#  tidy up, and pass the result to the manual viewer
+curl -s $FEED | xsltproc $XSLTFILE - | grep -v xml |  man -l - 
+
+# Remove the program-generated stylesheet
+rm $XSLTFILE
+
