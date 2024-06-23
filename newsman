@@ -12,59 +12,59 @@
 #
 # https://kevinboone.me/clh_newsman.html
 #
-# Copyright (c)2022 Kevin Boone, GPL v3.0
+# Copyright (c)2024 Kevin Boone, GPL v3.0
 #
 #===========================================================================
 
-# The feed and page title that will be used if there is no command-line
-#  argument
-FEED="http://feeds.bbci.co.uk/news/rss.xml"
-TITLE="Headlines"
+VERSION=0.2a
 
-# The file where we will write out the style sheet, for later use by
+# The base URL for BBC news feeds. %%TOPIC%% will be substituted later 
+FEED_BASE="https://feeds.bbci.co.uk/news/%%TOPIC%%/rss.xml"
+
+if [ ! -z "$1" ] ; then
+  TOPIC=$1
+  TITLE="Headlines - $TOPIC"
+else
+  TOPIC=
+  TITLE="Headlines"
+fi
+
+if [[ "$TOPIC" == "-h" || "$TOPIC" == "--help" ]]; then
+  echo Usage: "[-h|--help]" "[-v|--version]" newsman [topic]
+  echo Topics are : world, uk, health, business, politics, education, 
+  echo science, technology, entertainment. Omit topic for
+  echo general headlines. 
+  exit
+fi
+
+if [[ "$TOPIC" == "-v" || "$TOPIC" == "--version" ]]; then
+  echo newsman version $VERSION 
+  exit
+fi
+
+FEED=`echo $FEED_BASE | sed s/%%TOPIC%%/${TOPIC}/`
+
+# The file where we will write out the XSLT stylesheet, for later use by
 #  xsltprc
 XSLTFILE="/tmp/newsman$$"
 
-# Work out what RSS feed to use, based on the command-line argument
-if [ ! -z "$1" ] ; then
-  if [ "$1" == "world" ] ; then
-    FEED="http://feeds.bbci.co.uk/news/world/rss.xml"
-    TITLE="World"
-  elif [ "$1" == "uk" ] ; then
-    FEED="http://feeds.bbci.co.uk/news/uk/rss.xml"
-    TITLE="UK"
-  elif [ "$1" == "UK" ] ; then
-    FEED="http://feeds.bbci.co.uk/news/uk/rss.xml"
-    TITLE="UK"
-  elif [ "$1" == "business" ] ; then
-    FEED="http://feeds.bbci.co.uk/news/business/rss.xml"
-    TITLE="Business"
-  elif [ "$1" == "politics" ] ; then
-    FEED="http://feeds.bbci.co.uk/news/politics/rss.xml"
-    TITLE="Politics"
-  elif [ "$1" == "health" ] ; then
-    FEED="http://feeds.bbci.co.uk/news/health/rss.xml"
-    TITLE="Health"
-  elif [ "$1" == "education" ] ; then
-    FEED="http://feeds.bbci.co.uk/news/education/rss.xml"
-    TITLE="Education and Family"
-  elif [ "$1" == "science" ] ; then
-    FEED="http://feeds.bbci.co.uk/news/science_and_environment/rss.xml"
-    TITLE="Science and Environment"
-  elif [ "$1" == "technology" ] ; then
-    FEED="http://feeds.bbci.co.uk/news/technology/rss.xml"
-    TITLE="Technology"
-  elif [ "$1" == "entertainment" ] ; then
-    FEED="http://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"
-    TITLE="Entertainment and Arts"
-  else
-    echo Usage: newsman [topic]
-    echo Topics are : world, uk, health, business, politics, education, 
-    echo science, technology, entertainment. Omit topic for
-    echo general headlines. 
-    exit
-  fi 
-fi
+RESPONSE=`curl -s $FEED` 
+RET=$?
+
+if [ $RET -ne 0 ]; then
+  echo $0: Can\'t download feed $FEED
+  exit
+fi 
+
+if [[ ! $RESPONSE == *"BBC News"* ]]; then
+  echo $0: response was not a BBC news RSS document  
+  exit
+fi 
+
+if [[ $RESPONSE == *"404 - Not"* ]]; then
+  echo $0: topic not found 
+  exit
+fi 
 
 # Write the (simple) stylesheet to a convenient file -- we will edit
 #  it in place later
@@ -90,10 +90,11 @@ EOF
 #  by the manual viewer
 sed --in-place s/@@@TITLE@@@/"$TITLE"/ $XSLTFILE
 
-# Do all the work -- download the feed, apply the style sheet,
-#  tidy up, and pass the result to the manual viewer
-curl -s $FEED | xsltproc $XSLTFILE - | grep -v xml |  man -l - 
+# Apply the stylesheet to the RSS resonse, and pass the result
+#  to the manual viewer
+echo "$RESPONSE" | xsltproc $XSLTFILE - | grep -v xml \
+  |  man -l -r "newsman - ${TITLE}" - 
 
 # Remove the program-generated stylesheet
-rm $XSLTFILE
+rm -f $XSLTFILE
 
